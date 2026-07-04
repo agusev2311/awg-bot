@@ -2,6 +2,12 @@ import telebot
 from config import get_config
 import handlers
 from database.init_db import init_database
+from set_logging import setup_logging
+import logging
+
+# logs
+setup_logging()
+logger = logging.getLogger(__name__)
 
 # config
 config = get_config()
@@ -15,4 +21,5 @@ init_database(db_filename)
 bot = telebot.TeleBot(token)
 handlers.register_handlers(bot)
 
+logger.info("bot started")
 bot.infinity_polling()
