@@ -19,7 +19,7 @@ init_database(db_filename)
 # bot
 
 bot = telebot.TeleBot(token)
-handlers.register_handlers(bot)
+handlers.register_handlers(bot, db_filename)
 
 logger.info("bot started")
 bot.infinity_polling()
