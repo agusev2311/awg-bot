@@ -4,20 +4,25 @@ import handlers
 from database.init_db import init_database
 from set_logging import setup_logging
 import logging
+from work_with_awg import check
 
 # logs
 setup_logging()
 logger = logging.getLogger(__name__)
+logger.info("logger init")
 
 # config
 config = get_config()
-token, admin_id, db_filename = config["token"], config["admin_id"], config["db_filename"]
+token, admin_id, db_filename, awg_dir, awg_subnet, awg_subnet_v6, awg_endpoint = config["token"], config["admin_id"], config["db_filename"], config["awg_dir"], config["awg_subnet"], config["awg_subnet_v6"], config["awg_endpoint"]
 
 # database
 init_database(db_filename)
 
-# bot
+# check amnezia
+if not check.check_amnezia():
+    exit(1)
 
+# bot
 bot = telebot.TeleBot(token)
 handlers.register_handlers(bot, db_filename)
 
