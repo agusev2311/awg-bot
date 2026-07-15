@@ -12,13 +12,13 @@ def init_database(db):
         
         cursor.execute("""
     CREATE TABLE IF NOT EXISTS configs (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_id INTEGER NOT NULL,
     ip STRING NOT NULL,
     public_key STRING NOT NULL,
     private_key STRING NOT NULL,
-    FOREIGN KEY (owner_id) REFERENCES users(id),
-    status STRING NOT NULL
+    status STRING NOT NULL,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
 ); """)
 
         conn.commit()

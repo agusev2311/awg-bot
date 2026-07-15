@@ -56,8 +56,6 @@ def calculate_free_ip(awg_dir: str):
                 return str(ip)
 
 def generate_new_config(awg_dir: str):
-    conf = config.get_config()
-
     os.makedirs(awg_dir + "/configs", exist_ok=True)
     free_ip = calculate_free_ip(awg_dir)
     random_string = secrets.token_hex(32)
@@ -74,12 +72,4 @@ def generate_new_config(awg_dir: str):
         public_key = f.read()
     os.remove(f"/tmp/{random_string}_public.key")
     
-    with open(conf["awg_dir"] + "/client.base.conf", "r") as f:
-        client_config = f.read()
-        client_config.replace("{private_key}", private_key)
-        client_config.replace("{free_ip}", free_ip)
-        client_config.replace("{calculate_ipv6_from_ipv4(free_ip)}", calculate_ipv6_from_ipv4(free_ip))
-        client_config.replace("{public_key}", public_key)
-        client_config.replace("{conf[\"awg_endpoint\"]}", conf["awg_endpoint"])
-    
-    return free_ip, public_key, private_key, client_config
+    return free_ip, public_key, private_key

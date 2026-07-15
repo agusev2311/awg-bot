@@ -13,7 +13,7 @@ logger.info("logger init")
 
 # config
 config = get_config()
-token, admin_id, db_filename, awg_dir, awg_subnet, awg_subnet_v6, awg_endpoint = config["token"], config["admin_id"], config["db_filename"], config["awg_dir"], config["awg_subnet"], config["awg_subnet_v6"], config["awg_endpoint"]
+token, admin_id, db_filename, awg_dir, awg_subnet, awg_subnet_v6, awg_endpoint, awg_public = config["token"], config["admin_id"], config["db_filename"], config["awg_dir"], config["awg_subnet"], config["awg_subnet_v6"], config["awg_endpoint"], config["awg_public"]
 
 # database
 init_database(db_filename)
