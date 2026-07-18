@@ -1,12 +1,13 @@
 import sqlite3
 import logging
+import config
 
 logger = logging.getLogger(__name__)
 
 def create_user(db, id: int):
     with sqlite3.connect(db) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (id) VALUES (?); ", (id,))
+        cursor.execute("INSERT INTO users (id, status) VALUES (?, ?); ", (id, "not_approved"))
         conn.commit()
     logger.info(f"user with id %s created", id)
 
@@ -20,3 +21,22 @@ def user_exists(db, id: int):
 def create_user_if_not_exist(db, id: int):
     if not user_exists(db, id):
         create_user(db, id)
+    if int(config.get_config()["admin_id"]) == id:
+        approve_user(db, id)
+
+def approve_user(db, id): set_status(db, id, "ok")
+
+def set_status(db, id: int, status):
+    with sqlite3.connect(db) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET status = ? WHERE id = ?", (status, id))
+        conn.commit()
+
+def is_approved(db: str, id: int):
+    with sqlite3.connect(db) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (id,))
+        result = cursor.fetchone()
+        r = dict(result) if result else None
+        return r["status"] == "ok"

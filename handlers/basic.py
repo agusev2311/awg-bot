@@ -3,16 +3,18 @@ from database import users
 import work_with_awg
 import io
 from work_with_awg import generate_client_config
+from keyboards.start_keyboard import start_keyboard
+import config
 
 def register_handlers(bot, db_filename):
     @bot.message_handler(commands=["start"])
     def send_welcome(message):
         users.create_user_if_not_exist(db_filename, int(message.from_user.id))
-        bot.reply_to(message, "Hi!")
-        
-    @bot.message_handler(commands=["ping"])
-    def ping(message):
-        bot.reply_to(message, "Pong")
+        if users.is_approved(db_filename, int(message.from_user.id)):
+            bot.send_message(message.chat.id, "Welcome!",
+                             reply_markup=start_keyboard(int(message.from_user.id) == int(config.get_config()["admin_id"])))
+        else:
+            bot.reply_to(message, "Your account is not approved yet. Please contact administrator or just wait")
 
     @bot.message_handler(commands=["new_config"])
     def new_config(message):
