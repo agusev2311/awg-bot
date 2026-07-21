@@ -40,3 +40,42 @@ def is_approved(db: str, id: int):
         result = cursor.fetchone()
         r = dict(result) if result else None
         return r["status"] == "ok"
+
+def get_users_page(db: str, page: int, per_page: int) -> tuple[list[dict], int]:
+    offset = max(page - 1, 0) * per_page
+    with sqlite3.connect(db) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        cursor.execute(
+            """
+            SELECT users.id, users.status, COUNT(configs.id) AS configs_count
+            FROM users
+            LEFT JOIN configs ON configs.owner_id = users.id
+            GROUP BY users.id, users.status
+            ORDER BY users.id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
+        )
+        rows = cursor.fetchall()
+    return [dict(row) for row in rows], total_users
+
+def get_user_by_id(db: str, id: int) -> dict | None:
+    with sqlite3.connect(db) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT users.id, users.status, COUNT(configs.id) AS configs_count
+            FROM users
+            LEFT JOIN configs ON configs.owner_id = users.id
+            WHERE users.id = ?
+            GROUP BY users.id, users.status
+            LIMIT 1
+            """,
+            (id,),
+        )
+        row = cursor.fetchone()
+    return dict(row) if row else None
