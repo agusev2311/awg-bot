@@ -33,7 +33,7 @@ def admin_users_keyboard(users: list[dict], page: int, total_users: int, per_pag
 
 def admin_user_keyboard(user_id: int, page: int, current_status: str) -> InlineKeyboardMarkup:
     markup = InlineKeyboardMarkup(row_width=2)
-    statuses = ["ok", "not_approved"]
+    statuses = ["ok", "not_approved", "banned"]
 
     buttons = []
     for status in statuses:

@@ -5,6 +5,9 @@ import config
 
 USERS_PER_PAGE = 10
 
+def _is_banned(db_filename: str, user_id: int) -> bool:
+    return users.get_status(db_filename, user_id) == "banned"
+
 def _get_user_title(bot, user_id: int) -> str:
     try:
         chat = bot.get_chat(user_id)
@@ -65,6 +68,10 @@ def _render_user_card(bot, call, db_filename, user_id: int, page: int):
     )
 
 def register_handlers(bot, db_filename):
+    @bot.callback_query_handler(func=lambda call: _is_banned(db_filename, int(call.from_user.id)))
+    def handle_banned_callback(call):
+        bot.answer_callback_query(call.id, "Your account has been banned")
+
     @bot.callback_query_handler(func=lambda call: call.data == "ping")
     def handle_get_config(call):
         bot.answer_callback_query(call.id)

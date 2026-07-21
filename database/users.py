@@ -32,14 +32,15 @@ def set_status(db, id: int, status):
         cursor.execute("UPDATE users SET status = ? WHERE id = ?", (status, id))
         conn.commit()
 
-def is_approved(db: str, id: int):
+def get_status(db: str, id: int) -> str | None:
     with sqlite3.connect(db) as conn:
-        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (id,))
+        cursor.execute("SELECT status FROM users WHERE id = ? LIMIT 1", (id,))
         result = cursor.fetchone()
-        r = dict(result) if result else None
-        return r["status"] == "ok"
+    return result[0] if result else None
+
+def is_approved(db: str, id: int):
+    return get_status(db, id) == "ok"
 
 def get_users_page(db: str, page: int, per_page: int) -> tuple[list[dict], int]:
     offset = max(page - 1, 0) * per_page
