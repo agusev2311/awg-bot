@@ -9,6 +9,8 @@ def generate_server_config():
         awg_config = f.read().rstrip() + "\n\n"
     
     for conf in all_configs:
+        if conf["status"] != "active":
+            continue
         awg_config += f"""[Peer]
 PublicKey = {conf["public_key"]}
 AllowedIPs = {conf["ip"]}/32, {calculate_ipv6_from_ipv4(conf["ip"])}/128

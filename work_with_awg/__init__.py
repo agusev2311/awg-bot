@@ -20,3 +20,11 @@ def new_user_config(owner_id, name: str):
     )
     config_reload()
     return new_conf_id
+
+def set_config_status(config_id: int, status: str):
+    configs.update_config_status(conf["db_filename"], config_id, status)
+    config_reload()
+
+def delete_user_config(config_id: int):
+    configs.delete_config(conf["db_filename"], config_id)
+    config_reload()

@@ -53,7 +53,7 @@ def get_users_page(db: str, page: int, per_page: int) -> tuple[list[dict], int]:
             """
             SELECT users.id, users.status, COUNT(configs.id) AS configs_count
             FROM users
-            LEFT JOIN configs ON configs.owner_id = users.id
+            LEFT JOIN configs ON configs.owner_id = users.id AND configs.status != 'deleted'
             GROUP BY users.id, users.status
             ORDER BY users.id ASC
             LIMIT ? OFFSET ?
@@ -71,7 +71,7 @@ def get_user_by_id(db: str, id: int) -> dict | None:
             """
             SELECT users.id, users.status, users.configs_limit, COUNT(configs.id) AS configs_count
             FROM users
-            LEFT JOIN configs ON configs.owner_id = users.id
+            LEFT JOIN configs ON configs.owner_id = users.id AND configs.status != 'deleted'
             WHERE users.id = ?
             GROUP BY users.id, users.status, users.configs_limit
             LIMIT 1

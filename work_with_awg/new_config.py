@@ -4,6 +4,7 @@ import logging
 import subprocess
 import ipaddress
 import secrets
+from database import configs
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,33 @@ def calculate_ipv6_from_ipv4(ipv4: str) -> str:
     return str(ipv6_addr)
 
 def calculate_free_ip(awg_dir: str):
-    if not os.path.exists(awg_dir + "/configs/.data.json"):
-        ip = 2
-        subnet = ipaddress.ip_network(config.get_config()["awg_subnet"], strict=False)
+    del awg_dir
+    conf = config.get_config()
+    subnet = ipaddress.ip_network(conf["awg_subnet"], strict=False)
+    used_ips = set()
+
+    try:
         result = subprocess.run(["awg"], capture_output=True, text=True, check=True).stdout
-        for ip in subnet.hosts():
-            if ip == subnet.network_address + 1: continue
-            if not str(ip) in result:
-                return str(ip)
+    except subprocess.CalledProcessError:
+        result = ""
+
+    for token in result.replace(",", " ").split():
+        try:
+            ip = ipaddress.ip_address(token.split("/")[0])
+        except ValueError:
+            continue
+        if ip.version == 4 and ip in subnet:
+            used_ips.add(str(ip))
+
+    used_ips.update(configs.get_all_used_ips(conf["db_filename"]))
+
+    for ip in subnet.hosts():
+        if ip == subnet.network_address + 1:
+            continue
+        if str(ip) not in used_ips:
+            return str(ip)
+
+    raise RuntimeError("No free IP addresses available")
 
 def generate_new_config(awg_dir: str):
     os.makedirs(awg_dir + "/configs", exist_ok=True)

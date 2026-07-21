@@ -1,10 +1,18 @@
 from keyboards.start_keyboard import start_keyboard
-from keyboards.admin_keyboard import admin_main_keyboard, admin_users_keyboard, admin_user_keyboard, user_configs_keyboard
+from keyboards.admin_keyboard import (
+    admin_main_keyboard,
+    admin_users_keyboard,
+    admin_user_keyboard,
+    user_configs_keyboard,
+    user_config_keyboard,
+    admin_configs_keyboard,
+)
 from database import users, configs
 import config
 import io
 import re
 import work_with_awg
+from telebot.apihelper import ApiTelegramException
 from work_with_awg import generate_client_config
 
 USERS_PER_PAGE = 10
@@ -13,6 +21,19 @@ CONFIGS_PER_PAGE = 10
 def _build_config_filename(name: str, fallback: str) -> str:
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._")
     return safe_name or fallback
+
+def _safe_edit_message_text(bot, *, text: str, chat_id: int, message_id: int, reply_markup):
+    try:
+        bot.edit_message_text(
+            text=text,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup,
+        )
+    except ApiTelegramException as exc:
+        if "message is not modified" in str(exc):
+            return
+        raise
 
 def _is_banned(db_filename: str, user_id: int) -> bool:
     return users.get_status(db_filename, user_id) == "banned"
@@ -48,7 +69,8 @@ def _render_users_page(bot, call, db_filename, page: int):
         text_lines.append("")
         text_lines.append("No users")
 
-    bot.edit_message_text(
+    _safe_edit_message_text(
+        bot,
         text="\n".join(text_lines),
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
@@ -66,7 +88,8 @@ def _render_user_card(bot, call, db_filename, user_id: int, page: int):
     effective_limit = users.get_effective_configs_limit(db_filename, user_id)
     limit_line = user["configs_limit"] if user["configs_limit"] is not None else f"default ({effective_limit})"
 
-    bot.edit_message_text(
+    _safe_edit_message_text(
+        bot,
         text=(
             f"User {user['id']}\n\n"
             f"Name: {user_title}\n"
@@ -99,11 +122,86 @@ def _render_user_configs_page(bot, call, db_filename, user_id: int, page: int):
         text_lines.append("")
         text_lines.append("No configs")
 
-    bot.edit_message_text(
+    _safe_edit_message_text(
+        bot,
         text="\n".join(text_lines),
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=user_configs_keyboard(configs_page, page, total_configs, CONFIGS_PER_PAGE),
+    )
+
+def _render_user_config_card(bot, call, db_filename, user_id: int, config_id: int, page: int):
+    user_config = configs.get_user_config_by_id(db_filename, user_id, config_id)
+    if not user_config:
+        bot.answer_callback_query(call.id, "Config not found")
+        _render_user_configs_page(bot, call, db_filename, user_id, page)
+        return
+
+    config_title = user_config["name"] or f"config #{user_config['id']}"
+
+    _safe_edit_message_text(
+        bot,
+        text=(
+            f"Config #{user_config['id']}\n\n"
+            f"Name: {config_title}\n"
+            f"Status: {user_config['status']}\n"
+            f"IP: {user_config['ip']}"
+        ),
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=user_config_keyboard(config_id, page, user_config["status"]),
+    )
+
+def _render_admin_configs_page(bot, call, db_filename, page: int):
+    configs_page, total_configs = configs.get_configs_page(db_filename, page, CONFIGS_PER_PAGE)
+    total_pages = max((total_configs + CONFIGS_PER_PAGE - 1) // CONFIGS_PER_PAGE, 1)
+    page = min(max(page, 1), total_pages)
+
+    if not configs_page and page > 1:
+        configs_page, total_configs = configs.get_configs_page(db_filename, total_pages, CONFIGS_PER_PAGE)
+        page = total_pages
+
+    text_lines = [f"All configs {page}/{total_pages}", f"Total: {total_configs}"]
+    if configs_page:
+        text_lines.append("")
+        for config_item in configs_page:
+            config_title = config_item["name"] or f"config #{config_item['id']}"
+            text_lines.append(
+                f"#{config_item['id']} | user {config_item['owner_id']} | {config_item['status']} | {config_title}"
+            )
+    else:
+        text_lines.append("")
+        text_lines.append("No configs")
+
+    _safe_edit_message_text(
+        bot,
+        text="\n".join(text_lines),
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=admin_configs_keyboard(configs_page, page, total_configs, CONFIGS_PER_PAGE),
+    )
+
+def _render_admin_config_card(bot, call, db_filename, config_id: int, page: int):
+    config_item = configs.get_config_by_id(db_filename, config_id)
+    if not config_item:
+        bot.answer_callback_query(call.id, "Config not found")
+        _render_admin_configs_page(bot, call, db_filename, page)
+        return
+
+    config_title = config_item["name"] or f"config #{config_item['id']}"
+
+    _safe_edit_message_text(
+        bot,
+        text=(
+            f"Config #{config_item['id']}\n\n"
+            f"Name: {config_title}\n"
+            f"Owner: {config_item['owner_id']}\n"
+            f"Status: {config_item['status']}\n"
+            f"IP: {config_item['ip']}"
+        ),
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=user_config_keyboard(config_id, 1, config_item["status"], admin_page=page),
     )
 
 def register_handlers(bot, db_filename):
@@ -111,30 +209,27 @@ def register_handlers(bot, db_filename):
     def handle_banned_callback(call):
         bot.answer_callback_query(call.id, "Your account has been banned")
 
-    @bot.callback_query_handler(func=lambda call: call.data == "ping")
-    def handle_get_config(call):
-        bot.answer_callback_query(call.id)
-        bot.send_message(call.message.chat.id, "pong")
-
     @bot.callback_query_handler(func=lambda call: call.data == "admin_panel")
     def handle_get_config(call):
         bot.answer_callback_query(call.id)
-        bot.edit_message_text(
-            text="welcome, admin :3",
+        _safe_edit_message_text(
+            bot,
+            text="Admin panel",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=admin_main_keyboard()
+            reply_markup=admin_main_keyboard(),
         )
 
     @bot.callback_query_handler(func=lambda call: call.data == "main_menu")
     def handle_main_menu(call):
         bot.answer_callback_query(call.id)
         is_admin = int(call.from_user.id) == int(config.get_config()["admin_id"])
-        bot.edit_message_text(
-            text="Welcome!",
+        _safe_edit_message_text(
+            bot,
+            text="Welcome! Choose an action:",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=start_keyboard(is_admin)
+            reply_markup=start_keyboard(is_admin),
         )
 
     @bot.callback_query_handler(func=lambda call: call.data == "admin_users")
@@ -184,6 +279,7 @@ def register_handlers(bot, db_filename):
 
             users.set_configs_limit(db_filename, int(user_id), None if limit == 0 else limit)
             bot.reply_to(message, "User config limit updated")
+            _render_user_card(bot, call, db_filename, int(user_id), int(page))
 
         bot.register_next_step_handler(sent, process_limit)
 
@@ -234,11 +330,18 @@ def register_handlers(bot, db_filename):
             file_buffer.name = f"{_build_config_filename(config_name, f'config_{config_id}')}.conf"
             bot.send_document(chat_id=message.chat.id, document=file_buffer)
             bot.send_message(message.chat.id, "Config created")
+            _render_user_configs_page(bot, call, db_filename, user_id, 1)
 
         bot.register_next_step_handler(sent, process_config_name)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("user_config:"))
     def handle_user_config(call):
+        bot.answer_callback_query(call.id)
+        _, config_id, page = call.data.split(":")
+        _render_user_config_card(bot, call, db_filename, int(call.from_user.id), int(config_id), int(page))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("user_config_download:"))
+    def handle_user_config_download(call):
         bot.answer_callback_query(call.id)
         _, config_id, page = call.data.split(":")
         user_config = configs.get_user_config_by_id(db_filename, int(call.from_user.id), int(config_id))
@@ -250,5 +353,110 @@ def register_handlers(bot, db_filename):
         config_text = generate_client_config.generate(int(config_id))
         file_buffer = io.BytesIO(config_text.encode("utf-8"))
         config_name = user_config["name"] or f"config_{config_id}"
+        file_buffer.name = f"{_build_config_filename(config_name, f'config_{config_id}')}.conf"
+        bot.send_document(chat_id=call.message.chat.id, document=file_buffer)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("config_rename:"))
+    def handle_config_rename(call):
+        _, config_id, page, admin_page = call.data.split(":")
+        bot.answer_callback_query(call.id)
+        sent = bot.send_message(call.message.chat.id, "Send new config name")
+
+        def process_config_rename(message):
+            config_name = (message.text or "").strip()
+            if not config_name:
+                bot.reply_to(message, "Config name cannot be empty")
+                return
+
+            config_item = configs.get_config_by_id(db_filename, int(config_id))
+            if not config_item:
+                bot.reply_to(message, "Config not found")
+                return
+
+            is_admin = int(message.from_user.id) == int(config.get_config()["admin_id"])
+            if not is_admin and config_item["owner_id"] != int(message.from_user.id):
+                return
+
+            configs.update_config_name(db_filename, int(config_id), config_name)
+            bot.reply_to(message, "Config renamed")
+            if int(admin_page) > 0:
+                _render_admin_config_card(bot, call, db_filename, int(config_id), int(admin_page))
+            else:
+                _render_user_config_card(bot, call, db_filename, int(message.from_user.id), int(config_id), int(page))
+
+        bot.register_next_step_handler(sent, process_config_rename)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("config_status:"))
+    def handle_config_status(call):
+        _, config_id, page, admin_page, status = call.data.split(":")
+        config_item = configs.get_config_by_id(db_filename, int(config_id))
+        if not config_item:
+            bot.answer_callback_query(call.id, "Config not found")
+            return
+
+        is_admin = int(call.from_user.id) == int(config.get_config()["admin_id"])
+        if not is_admin and config_item["owner_id"] != int(call.from_user.id):
+            return
+
+        work_with_awg.set_config_status(int(config_id), status)
+        bot.answer_callback_query(call.id, f"Config set to {status}")
+        if int(admin_page) > 0:
+            _render_admin_config_card(bot, call, db_filename, int(config_id), int(admin_page))
+        else:
+            _render_user_config_card(bot, call, db_filename, int(call.from_user.id), int(config_id), int(page))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("config_delete:"))
+    def handle_config_delete(call):
+        _, config_id, page, admin_page = call.data.split(":")
+        config_item = configs.get_config_by_id(db_filename, int(config_id))
+        if not config_item:
+            bot.answer_callback_query(call.id, "Config not found")
+            return
+
+        is_admin = int(call.from_user.id) == int(config.get_config()["admin_id"])
+        if not is_admin and config_item["owner_id"] != int(call.from_user.id):
+            return
+
+        work_with_awg.delete_user_config(int(config_id))
+        bot.answer_callback_query(call.id, "Config deleted")
+        if int(admin_page) > 0:
+            _render_admin_configs_page(bot, call, db_filename, int(admin_page))
+        else:
+            _render_user_configs_page(bot, call, db_filename, int(call.from_user.id), int(page))
+
+    @bot.callback_query_handler(func=lambda call: call.data == "admin_configs")
+    def handle_admin_configs(call):
+        bot.answer_callback_query(call.id)
+        _render_admin_configs_page(bot, call, db_filename, 1)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("admin_configs:"))
+    def handle_admin_configs_page(call):
+        bot.answer_callback_query(call.id)
+        _, page = call.data.split(":")
+        _render_admin_configs_page(bot, call, db_filename, int(page))
+
+    @bot.callback_query_handler(func=lambda call: call.data == "admin_configs_noop")
+    def handle_admin_configs_noop(call):
+        bot.answer_callback_query(call.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("admin_config:"))
+    def handle_admin_config(call):
+        bot.answer_callback_query(call.id)
+        _, config_id, page = call.data.split(":")
+        _render_admin_config_card(bot, call, db_filename, int(config_id), int(page))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("admin_config_download:"))
+    def handle_admin_config_download(call):
+        bot.answer_callback_query(call.id)
+        _, config_id, page = call.data.split(":")
+        config_item = configs.get_config_by_id(db_filename, int(config_id))
+        if not config_item:
+            bot.answer_callback_query(call.id, "Config not found")
+            _render_admin_configs_page(bot, call, db_filename, int(page))
+            return
+
+        config_text = generate_client_config.generate(int(config_id))
+        file_buffer = io.BytesIO(config_text.encode("utf-8"))
+        config_name = config_item["name"] or f"config_{config_id}"
         file_buffer.name = f"{_build_config_filename(config_name, f'config_{config_id}')}.conf"
         bot.send_document(chat_id=call.message.chat.id, document=file_buffer)
