@@ -11,6 +11,7 @@ def get_config():
     awg_subnet_v6 = os.getenv("AWG_SUBNET_V6")
     awg_endpoint = os.getenv("AWG_ENDPOINT")
     awg_public = os.getenv("AWG_SERVER_PUBLIC")
+    max_configs_per_user = os.getenv("AWG_MAX_CONFIGS_PER_USER", "15")
     return {
         "token": token,
         "admin_id": admin_id,
@@ -19,6 +20,6 @@ def get_config():
         "awg_subnet": awg_subnet,
         "awg_subnet_v6": awg_subnet_v6,
         "awg_endpoint": awg_endpoint,
-        "awg_public": awg_public
+        "awg_public": awg_public,
+        "max_configs_per_user": int(max_configs_per_user),
     }
-

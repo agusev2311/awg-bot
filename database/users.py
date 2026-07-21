@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 def create_user(db, id: int):
     with sqlite3.connect(db) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (id, status) VALUES (?, ?); ", (id, "not_approved"))
+        cursor.execute("INSERT INTO users (id, status, configs_limit) VALUES (?, ?, ?); ", (id, "not_approved", None))
         conn.commit()
     logger.info(f"user with id %s created", id)
 
@@ -69,14 +69,26 @@ def get_user_by_id(db: str, id: int) -> dict | None:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT users.id, users.status, COUNT(configs.id) AS configs_count
+            SELECT users.id, users.status, users.configs_limit, COUNT(configs.id) AS configs_count
             FROM users
             LEFT JOIN configs ON configs.owner_id = users.id
             WHERE users.id = ?
-            GROUP BY users.id, users.status
+            GROUP BY users.id, users.status, users.configs_limit
             LIMIT 1
             """,
             (id,),
         )
         row = cursor.fetchone()
     return dict(row) if row else None
+
+def set_configs_limit(db: str, id: int, limit: int | None):
+    with sqlite3.connect(db) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET configs_limit = ? WHERE id = ?", (limit, id))
+        conn.commit()
+
+def get_effective_configs_limit(db: str, id: int) -> int:
+    user = get_user_by_id(db, id)
+    if user and user["configs_limit"] is not None:
+        return int(user["configs_limit"])
+    return int(config.get_config()["max_configs_per_user"])
